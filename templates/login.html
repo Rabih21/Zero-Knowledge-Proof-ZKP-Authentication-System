@@ -1,0 +1,23 @@
+<link rel="stylesheet" href="/static/style.css">
+<div class="card">
+<h2>ZKP Authentication</h2>
+<input id="u" placeholder="Username">
+<input id="p" type="password" placeholder="Secret">
+<button onclick="start()">Login</button>
+<pre id="log"></pre>
+</div>
+
+<script src="/static/crypto.js"></script>
+<script>
+async function start(){
+ let r = await fetch("/login/start",{method:"POST",headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({username:u.value})});
+ let d = await r.json();
+ let A = Math.pow(2, Math.random()*1e9);  // simplified client demo
+ let proof = A + d.challenge + p.value;   // demonstration only
+ let f = await fetch("/login/finish",{method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({username:u.value,A:A,proof:proof})});
+ log.innerText = JSON.stringify(await f.json(),null,2);
+}
+</script>
