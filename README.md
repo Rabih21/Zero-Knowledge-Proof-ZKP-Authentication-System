@@ -1,10 +1,8 @@
 # 🔐 Zero-Knowledge Password Proof (ZKPP) Demo
 
-A secure, educational implementation of a **password-based authentication system** using **zero-knowledge principles**. The server never sees the user's password — not even a hash of it — and cannot impersonate the user.
+A secure, educational implementation of a **password-based authentication system** using **zero-knowledge principles**. The server never sees the user's password not even a hash of it and cannot impersonate the user.
 
 Built with **Flask**, **JavaScript**, and cryptographic primitives based on the **Schnorr identification protocol** adapted for password authentication.
-
----
 
 ## ✨ Features
 
@@ -14,8 +12,6 @@ Built with **Flask**, **JavaScript**, and cryptographic primitives based on the 
 - **Audit dashboard**: View cryptographic values used during registration and login.
 - **Automatic flow**: Register → Login → Dashboard with seamless redirects.
 - **Large safe prime**: Uses a 1536-bit RFC 3526 MODP group for strong security.
-
----
 
 ## 🛠️ How It Works
 
@@ -38,15 +34,12 @@ Built with **Flask**, **JavaScript**, and cryptographic primitives based on the 
 ✅ If equal → user is authenticated.  
 ❌ No password, hash, or secret is ever transmitted.
 
----
 
 ## 📦 Requirements
 
 - Python 3.7+
 - Flask
 - Web browser with modern JavaScript support
-
----
 
 ## ▶️ Quick Start
 
@@ -83,17 +76,11 @@ zkpp-demo/
     └── dashboard.html     # Audit dashboard
 ```
 
----
 
 ## 🔒 Security Notes
 
 - **For educational/demo purposes only**.
-- Uses a **custom ZKPP scheme** — not standardized like SRP or OPAQUE.
-- In production, prefer **SRP-6a** or **OPAQUE** (resistant to precomputation attacks).
-- Always use **HTTPS** in real deployments.
-- The prime `P` is from [RFC 3526 Group 5 (1536-bit)](https://datatracker.ietf.org/doc/html/rfc3526#section-3).
-
----
+- Uses a **custom ZKPP scheme**  not standardized like SRP or OPAQUE.
 
 ## 🧪 Testing
 
@@ -103,12 +90,3 @@ zkpp-demo/
 4. Enter the same credentials → should show **"AUTHENTICATED"**
 5. You’ll be redirected to the **Audit Dashboard**
 6. View the full cryptographic trace of your session!
-
----
-
-## 🚀 Future Improvements
-- Add logout button
-- Implement rate limiting
-- Upgrade to SRP-6a
-- Add user session persistence
-- Dockerize for deployment
