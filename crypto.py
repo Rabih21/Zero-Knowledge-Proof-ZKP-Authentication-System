@@ -21,7 +21,7 @@ def generate_salt():
     return secrets.token_hex(16)
 
 def password_to_secret(password, salt):
-    return H(salt, password) % (P - 1)  # ← salt FIRST!
+    return H(salt, password) % (P - 1)
 
 def generate_verifier(password, salt):
     x = password_to_secret(password, salt)

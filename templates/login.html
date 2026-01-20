@@ -15,30 +15,25 @@ async function login() {
   const password = p.value;
 
   try {
-    // Step 1: Get salt and challenge
     const startRes = await fetch("/login/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username })
     });
     const sData = await startRes.json();
-    if (!startRes.ok) throw new Error(sData.error || "Login start failed");
+    if (!startRes.ok) throw new Error(sData.error || "Login failed");
 
     const salt = sData.salt;
-    const challenge = sData.challenge;
+    const challenge = sData.challenge; // This is now a STRING
 
-    // Step 2: Compute x = H(salt, password)
     const x = await H(salt, password);
     const r = rand();
     const A = modPow(G, r, P);
 
-    // Step 3: e = H(A, challenge)
-    const e = await H(A.toString(), challenge.toString());
+    const e = await H(A.toString(), challenge); // challenge is string → matches Python
 
-    // Step 4: s = r + e * x mod (P-1)
     const proof = (r + e * x) % (P - 1n);
 
-    // Step 5: Send proof
     const finishRes = await fetch("/login/finish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,7 +47,7 @@ async function login() {
     log.innerText = JSON.stringify(result, null, 2);
 
     if (result.redirect) {
-      window.location = result.redirect;
+      window.location.href = result.redirect;
     }
   } catch (err) {
     log.innerText = JSON.stringify({ error: err.message }, null, 2);

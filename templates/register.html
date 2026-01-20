@@ -1,22 +1,30 @@
+<!-- templates/register.html -->
 <link rel="stylesheet" href="/static/style.css">
 <div class="card">
-<h2>Register</h2>
-<input id="u" placeholder="Username">
-<input id="p" type="password" placeholder="Password">
-<button onclick="reg()">Register</button>
-<pre id="out"></pre>
+  <h2>Register</h2>
+  <input id="u" placeholder="Username">
+  <input id="p" type="password" placeholder="Password">
+  <button onclick="reg()">Register</button>
+  <pre id="out"></pre>
 </div>
 
 <script>
-function reg(){
-fetch("/register",{method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({username:u.value,password:p.value})
-}).then(r=>r.json()).then(d=>{
-out.innerText=JSON.stringify(d,null,2);
-}).then(d=>{
-  if(d.redirect) window.location = d.redirect;
-});
-
+async function reg() {
+  const u = document.getElementById('u').value;
+  const p = document.getElementById('p').value;
+  try {
+    const res = await fetch("/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await res.json();
+    out.innerText = JSON.stringify(data, null, 2);
+    if (data.redirect) {
+      window.location.href = data.redirect;
+    }
+  } catch (err) {
+    out.innerText = JSON.stringify({ error: err.message }, null, 2);
+  }
 }
 </script>

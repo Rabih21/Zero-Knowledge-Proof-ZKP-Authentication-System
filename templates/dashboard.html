@@ -7,14 +7,11 @@
 
 <script>
 fetch("/audit")
-  .then(r => {
-    if (!r.ok) throw new Error("Unauthorized");
-    return r.json();
-  })
+  .then(r => r.json())
   .then(d => {
     audit.innerText = JSON.stringify(d, null, 2);
   })
   .catch(err => {
-    audit.innerText = JSON.stringify({ error: err.message }, null, 2);
+    audit.innerText = JSON.stringify({ error: "Failed to load audit log" }, null, 2);
   });
 </script>

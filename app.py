@@ -4,10 +4,9 @@ import sqlite3
 from crypto import *
 
 app = Flask(__name__)
-app.secret_key = "STRONG_ZKP_SECRET_CHANGE_IN_PROD"
+app.secret_key = "CHANGE_THIS_IN_PRODUCTION_123!"
 DB = "database.db"
 
-# ---------------- DATABASE ----------------
 def db():
     return sqlite3.connect(DB)
 
@@ -24,14 +23,11 @@ def init_db():
     con.commit()
     con.close()
 
-# ---------------- AUDIT LOG ----------------
 audit_log = {
     "register": {},
     "login_start": {},
     "login_finish": {}
 }
-
-# ---------------- ROUTES ----------------
 
 @app.route("/")
 def index():
@@ -60,7 +56,6 @@ def register():
     con.close()
 
     session.clear()
-    session["pending_user"] = user
 
     audit_log["register"] = {
         "client": {"username": user},
@@ -89,17 +84,13 @@ def login_start():
         return jsonify({"error": "User not found"}), 404
 
     salt = row[0]
-    C = generate_challenge()
+    C = generate_challenge()  # int
 
     session["user"] = user
-    session["challenge"] = C
+    session["challenge"] = C  # store as int
 
-    audit_log["login_start"] = {
-        "client": {"username": user},
-        "server": {"salt": salt, "challenge": C}
-    }
-
-    return jsonify({"salt": salt, "challenge": C})
+    # SEND CHALLENGE AS STRING TO AVOID JS PRECISION LOSS
+    return jsonify({"salt": salt, "challenge": str(C)})
 
 @app.route("/login/finish", methods=["POST"])
 def login_finish():
@@ -114,7 +105,7 @@ def login_finish():
         return jsonify({"error": "Invalid input"}), 400
 
     user = session["user"]
-    C = session["challenge"]
+    C = session["challenge"]  # this is an int
 
     con = db()
     cur = con.cursor()
@@ -126,14 +117,14 @@ def login_finish():
         return jsonify({"error": "User not found"}), 404
 
     v = int(row[0])
-    e = H(A, C) % (P - 1)
+    e = H(A, C) % (P - 1)  # C is int → str(C) is decimal string
 
     left = pow(G, s, P)
     right = (A * pow(v, e, P)) % P
 
     audit_log["login_finish"] = {
         "client": {"A": A, "s": s},
-        "server": {"g^s": left, "A·v^e": right, "e": e}
+        "server": {"g^s": left, "A·v^e": right}
     }
 
     if left == right:
