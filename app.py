@@ -4,7 +4,7 @@ import sqlite3
 from crypto import *
 
 app = Flask(__name__)
-app.secret_key = "CHANGE_THIS_IN_PRODUCTION_123!"
+app.secret_key = "TEST!"
 DB = "database.db"
 
 def db():
