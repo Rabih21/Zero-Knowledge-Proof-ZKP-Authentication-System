@@ -1,8 +1,8 @@
 <link rel="stylesheet" href="/static/style.css">
 <div class="card">
-<h2>ZKP Secure Registration</h2>
+<h2>Register</h2>
 <input id="u" placeholder="Username">
-<input id="p" type="password" placeholder="Secret Passphrase">
+<input id="p" type="password" placeholder="Password">
 <button onclick="reg()">Register</button>
 <pre id="out"></pre>
 </div>
@@ -14,6 +14,9 @@ headers:{"Content-Type":"application/json"},
 body:JSON.stringify({username:u.value,password:p.value})
 }).then(r=>r.json()).then(d=>{
 out.innerText=JSON.stringify(d,null,2);
+}).then(d=>{
+  if(d.redirect) window.location = d.redirect;
 });
+
 }
 </script>

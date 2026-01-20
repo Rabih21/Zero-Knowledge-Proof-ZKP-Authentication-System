@@ -1,7 +1,13 @@
 import hashlib
 import secrets
 
-P = 208351617316091241234326746312124448251235562226470491514186331217050270460481
+# Large safe prime (demo-grade but strong)
+P = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
+    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
+    "E485B576625E7EC6F44C42E9A63A3620FFFFFFFFFFFFFFFF", 16
+)
 G = 2
 
 def H(*args):
@@ -13,18 +19,17 @@ def H(*args):
 def generate_salt():
     return secrets.token_hex(16)
 
+def password_to_secret(password, salt):
+    return H(password, salt) % (P - 1)
+
 def generate_verifier(password, salt):
-    x = H(password, salt)
+    x = password_to_secret(password, salt)
     return pow(G, x, P)
 
-def generate_A():
-    r = secrets.randbits(256)
+def generate_commitment():
+    r = secrets.randbelow(P - 1)
     A = pow(G, r, P)
     return r, A
 
 def generate_challenge():
     return secrets.randbits(256)
-
-def generate_proof(A, C, password, salt):
-    x = H(password, salt)
-    return H(A, C, x)

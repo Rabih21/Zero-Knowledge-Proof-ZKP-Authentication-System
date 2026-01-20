@@ -1,46 +1,11 @@
 <link rel="stylesheet" href="/static/style.css">
-<div class="card" style="width:900px;">
-<h2>ZKP Security Dashboard</h2>
-
-<table>
-<tr><th>Phase</th><th>Client → Server</th><th>Server Stored</th><th>Server → Client</th></tr>
-<tr>
-<td>Registration</td>
-<td id="reg_c"></td>
-<td id="reg_s"></td>
-<td>-</td>
-</tr>
-<tr>
-<td>Login Start</td>
-<td id="ls_c"></td>
-<td>Salt + Verifier</td>
-<td id="ls_s"></td>
-</tr>
-<tr>
-<td>Login Finish</td>
-<td id="lf_c"></td>
-<td>Verifier</td>
-<td id="lf_s"></td>
-</tr>
-</table>
-
-<pre id="raw"></pre>
+<div class="card" style="width:900px">
+<h2>ZKP Audit Dashboard</h2>
+<pre id="audit"></pre>
 </div>
-
-<style>
-table{width:100%;border-collapse:collapse;}
-th,td{border:1px solid #38bdf8;padding:10px;}
-th{color:#38bdf8;}
-</style>
 
 <script>
 fetch("/audit").then(r=>r.json()).then(d=>{
-reg_c.innerText=JSON.stringify(d.register.client,null,2);
-reg_s.innerText=JSON.stringify(d.register.server,null,2);
-ls_c.innerText=JSON.stringify(d.login_start.client,null,2);
-ls_s.innerText=JSON.stringify(d.login_start.server,null,2);
-lf_c.innerText=JSON.stringify(d.login_finish.client,null,2);
-lf_s.innerText=JSON.stringify(d.login_finish.server,null,2);
-raw.innerText=JSON.stringify(d,null,2);
+audit.innerText = JSON.stringify(d,null,2);
 });
 </script>
