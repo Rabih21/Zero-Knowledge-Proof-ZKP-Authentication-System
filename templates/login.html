@@ -1,35 +1,61 @@
+<!-- templates/login.html -->
 <link rel="stylesheet" href="/static/style.css">
 <div class="card">
-<h2>ZKP Login</h2>
-<input id="u" placeholder="Username">
-<input id="p" type="password" placeholder="Password">
-<button onclick="login()">Login</button>
-<pre id="log"></pre>
+  <h2>ZKP Login</h2>
+  <input id="u" placeholder="Username">
+  <input id="p" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+  <pre id="log"></pre>
 </div>
 
 <script src="/static/crypto.js"></script>
 <script>
-async function login(){
-  const s = await fetch("/login/start",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({username:u.value})
-  }).then(r=>r.json());
+async function login() {
+  const username = u.value;
+  const password = p.value;
 
-  const x = await hash(p.value + s.salt);
-  const r = rand();
-  const A = modPow(G, r, P);
-  const e = await hash(A.toString() + s.challenge);
-  const proof = (r + e * x) % (P-1n);
+  try {
+    // Step 1: Get salt and challenge
+    const startRes = await fetch("/login/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const sData = await startRes.json();
+    if (!startRes.ok) throw new Error(sData.error || "Login start failed");
 
-  const res = await fetch("/login/finish",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({A:A.toString(), s:proof.toString()})
-  });
+    const salt = sData.salt;
+    const challenge = sData.challenge;
 
-  log.innerText = JSON.stringify(await res.json(),null,2);
-  then(d=>{
-  if(d.redirect) window.location = d.redirect;
-});
+    // Step 2: Compute x = H(salt, password)
+    const x = await H(salt, password);
+    const r = rand();
+    const A = modPow(G, r, P);
 
+    // Step 3: e = H(A, challenge)
+    const e = await H(A.toString(), challenge.toString());
+
+    // Step 4: s = r + e * x mod (P-1)
+    const proof = (r + e * x) % (P - 1n);
+
+    // Step 5: Send proof
+    const finishRes = await fetch("/login/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        A: A.toString(),
+        s: proof.toString()
+      })
+    });
+
+    const result = await finishRes.json();
+    log.innerText = JSON.stringify(result, null, 2);
+
+    if (result.redirect) {
+      window.location = result.redirect;
+    }
+  } catch (err) {
+    log.innerText = JSON.stringify({ error: err.message }, null, 2);
+  }
 }
 </script>

@@ -1,9 +1,10 @@
+# app.py
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 from crypto import *
 
 app = Flask(__name__)
-app.secret_key = "STRONG_ZKP_SECRET"
+app.secret_key = "STRONG_ZKP_SECRET_CHANGE_IN_PROD"
 DB = "database.db"
 
 # ---------------- DATABASE ----------------
@@ -30,11 +31,10 @@ audit_log = {
     "login_finish": {}
 }
 
-# ---------------- ROUTING LOGIC ----------------
+# ---------------- ROUTES ----------------
 
 @app.route("/")
 def index():
-    # Always start at registration
     return redirect(url_for("register_page"))
 
 # ---------------- REGISTER ----------------
@@ -60,7 +60,6 @@ def register():
     con.close()
 
     session.clear()
-    session["registered"] = True
     session["pending_user"] = user
 
     audit_log["register"] = {
@@ -74,8 +73,6 @@ def register():
 
 @app.route("/login", methods=["GET"])
 def login_page():
-    if not session.get("registered"):
-        return redirect(url_for("register_page"))
     return render_template("login.html")
 
 @app.route("/login/start", methods=["POST"])
@@ -106,21 +103,29 @@ def login_start():
 
 @app.route("/login/finish", methods=["POST"])
 def login_finish():
-    data = request.json
-    A = int(data["A"])
-    s = int(data["s"])
-    user = session.get("user")
-
-    if not user:
+    if "user" not in session or "challenge" not in session:
         return jsonify({"error": "Session expired"}), 403
+
+    data = request.json
+    try:
+        A = int(data["A"])
+        s = int(data["s"])
+    except (ValueError, TypeError, KeyError):
+        return jsonify({"error": "Invalid input"}), 400
+
+    user = session["user"]
+    C = session["challenge"]
 
     con = db()
     cur = con.cursor()
     cur.execute("SELECT verifier FROM users WHERE username=?", (user,))
-    v = int(cur.fetchone()[0])
+    row = cur.fetchone()
     con.close()
 
-    C = session.get("challenge")
+    if not row:
+        return jsonify({"error": "User not found"}), 404
+
+    v = int(row[0])
     e = H(A, C) % (P - 1)
 
     left = pow(G, s, P)
@@ -128,14 +133,14 @@ def login_finish():
 
     audit_log["login_finish"] = {
         "client": {"A": A, "s": s},
-        "server": {"g^s": left, "A·v^e": right}
+        "server": {"g^s": left, "A·v^e": right, "e": e}
     }
 
     if left == right:
         session["authenticated"] = True
         return jsonify({"status": "AUTHENTICATED", "redirect": "/dashboard"})
-
-    return jsonify({"status": "FAILED"})
+    else:
+        return jsonify({"status": "FAILED"}), 401
 
 # ---------------- DASHBOARD ----------------
 
