@@ -1,39 +1,49 @@
 # app.py
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+import os
 import sqlite3
-from crypto import *
+from flask import (
+    Flask, render_template, request, jsonify, session,
+    redirect, url_for, send_file
+)
+from io import BytesIO
+from werkzeug.utils import secure_filename
+from crypto import (
+    generate_salt, generate_verifier, generate_challenge, H, P, G,
+    ensure_user_rsa_keypair, encrypt_file_for_user, decrypt_file_for_user,
+    get_user_key_path
+)
 
 app = Flask(__name__)
-app.secret_key = "TEST!"
-DB = "database.db"
+app.secret_key = "SUPER_SECRET_CHANGE_IN_PROD_2026!"
+DB_PATH = "database.db"
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def db():
-    return sqlite3.connect(DB)
+# ======================
+# DATABASE
+# ======================
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
-    con = db()
-    cur = con.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users(
-            username TEXT PRIMARY KEY,
-            salt TEXT,
-            verifier TEXT
-        )
-    """)
-    con.commit()
-    con.close()
+    with get_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                salt TEXT NOT NULL,
+                verifier TEXT NOT NULL
+            )
+        """)
+        conn.commit()
 
-audit_log = {
-    "register": {},
-    "login_start": {},
-    "login_finish": {}
-}
-
+# ======================
+# AUTHENTICATION (ZKP)
+# ======================
 @app.route("/")
 def index():
     return redirect(url_for("register_page"))
-
-# ---------------- REGISTER ----------------
 
 @app.route("/register", methods=["GET"])
 def register_page():
@@ -41,30 +51,24 @@ def register_page():
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.json
-    user = data["username"]
-    pwd = data["password"]
+    data = request.get_json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
 
     salt = generate_salt()
-    verifier = generate_verifier(pwd, salt)
+    verifier = generate_verifier(password, salt)
 
-    con = db()
-    cur = con.cursor()
-    cur.execute("INSERT OR REPLACE INTO users VALUES (?,?,?)",
-                (user, salt, str(verifier)))
-    con.commit()
-    con.close()
-
-    session.clear()
-
-    audit_log["register"] = {
-        "client": {"username": user},
-        "server": {"salt": salt, "verifier": verifier}
-    }
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO users (username, salt, verifier) VALUES (?, ?, ?)",
+            (username, salt, str(verifier))
+        )
+        conn.commit()
 
     return jsonify({"status": "REGISTERED", "redirect": "/login"})
-
-# ---------------- LOGIN ----------------
 
 @app.route("/login", methods=["GET"])
 def login_page():
@@ -72,92 +76,130 @@ def login_page():
 
 @app.route("/login/start", methods=["POST"])
 def login_start():
-    user = request.json["username"]
-
-    con = db()
-    cur = con.cursor()
-    cur.execute("SELECT salt FROM users WHERE username=?", (user,))
-    row = cur.fetchone()
-    con.close()
-
+    data = request.get_json()
+    username = data.get("username", "").strip()
+    
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT salt FROM users WHERE username = ?", (username,)
+        ).fetchone()
+    
     if not row:
         return jsonify({"error": "User not found"}), 404
 
-    salt = row[0]
-    C = generate_challenge()  # int
+    salt = row["salt"]
+    challenge = generate_challenge()
+    session["user"] = username
+    session["challenge"] = challenge
 
-    session["user"] = user
-    session["challenge"] = C  # store as int
-
-    # SEND CHALLENGE AS STRING TO AVOID JS PRECISION LOSS
-    return jsonify({"salt": salt, "challenge": str(C)})
+    return jsonify({"salt": salt, "challenge": str(challenge)})
 
 @app.route("/login/finish", methods=["POST"])
 def login_finish():
     if "user" not in session or "challenge" not in session:
         return jsonify({"error": "Session expired"}), 403
 
-    data = request.json
+    data = request.get_json()
     try:
         A = int(data["A"])
         s = int(data["s"])
-    except (ValueError, TypeError, KeyError):
-        return jsonify({"error": "Invalid input"}), 400
+    except (TypeError, ValueError, KeyError):
+        return jsonify({"error": "Invalid proof"}), 400
 
-    user = session["user"]
-    C = session["challenge"]  # this is an int
+    username = session["user"]
+    challenge = session["challenge"]
 
-    con = db()
-    cur = con.cursor()
-    cur.execute("SELECT verifier FROM users WHERE username=?", (user,))
-    row = cur.fetchone()
-    con.close()
-
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT verifier FROM users WHERE username = ?", (username,)
+        ).fetchone()
+    
     if not row:
         return jsonify({"error": "User not found"}), 404
 
-    v = int(row[0])
-    e = H(A, C) % (P - 1)  # C is int → str(C) is decimal string
-
+    v = int(row["verifier"])
+    e = H(A, challenge) % (P - 1)
     left = pow(G, s, P)
     right = (A * pow(v, e, P)) % P
 
-    audit_log["login_finish"] = {
-        "client": {"A": A, "s": s},
-        "server": {"g^s": left, "A·v^e": right}
-    }
-
     if left == right:
         session["authenticated"] = True
+        session["username"] = username
         return jsonify({"status": "AUTHENTICATED", "redirect": "/dashboard"})
     else:
         return jsonify({"status": "FAILED"}), 401
 
-# ---------------- DASHBOARD ----------------
-
+# ======================
+# FILE ENCRYPTION SYSTEM
+# ======================
 @app.route("/dashboard")
 def dashboard():
     if not session.get("authenticated"):
         return redirect(url_for("login_page"))
     return render_template("dashboard.html")
 
-# ---------------- AUDIT API ----------------
-
-@app.route("/audit")
-def audit():
+@app.route("/encrypt", methods=["POST"])
+def encrypt_file():
     if not session.get("authenticated"):
         return jsonify({"error": "Unauthorized"}), 403
-    return jsonify(audit_log)
+    
+    username = session["username"]
+    ensure_user_rsa_keypair(username)
 
-# ---------------- LOGOUT ----------------
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
 
+    try:
+        data = file.read()
+        encrypted = encrypt_file_for_user(data, username)
+        return send_file(
+            BytesIO(encrypted),
+            mimetype="application/octet-stream",
+            as_attachment=True,
+            download_name=f"{secure_filename(file.filename)}.enc"
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/decrypt", methods=["POST"])
+def decrypt_file():
+    if not session.get("authenticated"):
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    username = session["username"]
+    if not os.path.exists(get_user_key_path(username)):
+        return jsonify({"error": "Encrypt a file first"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+
+    file = request.files["file"]
+    try:
+        encrypted_data = file.read()
+        plaintext = decrypt_file_for_user(encrypted_data, username)
+        try:
+            text = plaintext.decode("utf-8")
+            return jsonify({"content": text})
+        except UnicodeDecodeError:
+            return jsonify({"content": "BINARY_FILE", "size_bytes": len(plaintext)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ======================
+# SESSION
+# ======================
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("register_page"))
 
-# ---------------- MAIN ----------------
-
+# ======================
+# MAIN
+# ======================
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)

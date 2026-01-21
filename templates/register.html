@@ -1,30 +1,44 @@
-<!-- templates/register.html -->
-<link rel="stylesheet" href="/static/style.css">
-<div class="card">
-  <h2>Register</h2>
-  <input id="u" placeholder="Username">
-  <input id="p" type="password" placeholder="Password">
-  <button onclick="reg()">Register</button>
-  <pre id="out"></pre>
-</div>
-
-<script>
-async function reg() {
-  const u = document.getElementById('u').value;
-  const p = document.getElementById('p').value;
-  try {
-    const res = await fetch("/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: u, password: p })
-    });
-    const data = await res.json();
-    out.innerText = JSON.stringify(data, null, 2);
-    if (data.redirect) {
-      window.location.href = data.redirect;
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Register</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>Create Account</h2>
+      <div class="input-group">
+        <label>Username</label>
+        <input type="text" id="u" placeholder="Enter username">
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="p" placeholder="Enter password">
+      </div>
+      <button class="btn" onclick="register()">Register</button>
+      <a href="/login" style="display:block; margin-top:1.5rem;">Already have an account?</a>
+      <pre id="out" class="result" style="display:none;"></pre>
+    </div>
+  </div>
+  <script>
+    async function register() {
+      const u = document.getElementById('u').value;
+      const p = document.getElementById('p').value;
+      const out = document.getElementById('out');
+      
+      const res = await fetch('/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: u, password: p})
+      });
+      const data = await res.json();
+      out.style.display = 'block';
+      out.textContent = JSON.stringify(data, null, 2);
+      
+      if (data.redirect) window.location = data.redirect;
     }
-  } catch (err) {
-    out.innerText = JSON.stringify({ error: err.message }, null, 2);
-  }
-}
-</script>
+  </script>
+</body>
+</html>

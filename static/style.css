@@ -1,27 +1,81 @@
 /* static/style.css */
-body{
-    margin:0;
-    font-family:'Segoe UI',sans-serif;
-    background:linear-gradient(135deg,#0f172a,#020617);
-    color:#e5e7eb;
-    height:100vh;
-    display:flex;
-    justify-content:center;
-    align-items:center;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --card-bg: #ffffff;
+  --input-bg: #f8fafc;
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --radius: 12px;
 }
 
-.card{
-    width:420px;
-    background:#020617;
-    padding:30px;
-    border-radius:14px;
-    box-shadow:0 0 40px rgba(56,189,248,.25);
-    text-align:center;
+* { box-sizing: border-box; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e6e9ff 100%);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
 }
-
-h2{color:#38bdf8}
-input,button{width:100%;padding:12px;margin:10px 0;border-radius:8px;border:none}
-input{background:#020617;color:white;box-shadow:inset 0 0 8px rgba(56,189,248,.3)}
-button{background:#38bdf8;color:#020617;font-weight:bold;cursor:pointer}
-button:hover{background:#0ea5e9}
-pre{background:#020617;padding:10px;border-radius:8px;font-size:12px}
+.container { width: 100%; max-width: 460px; }
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 2.5rem;
+  text-align: center;
+}
+h2 {
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  font-size: 1.75rem;
+}
+.input-group { text-align: left; margin-bottom: 1.25rem; }
+.input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.input-group input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  font-size: 1rem;
+}
+.btn {
+  width: 100%;
+  padding: 0.875rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+.btn:hover { background: var(--primary-hover); }
+.result {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+  font-family: monospace;
+  font-size: 0.9rem;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  text-align: left;
+}
+a { color: var(--primary); text-decoration: none; font-weight: 500; }
+a:hover { text-decoration: underline; }
