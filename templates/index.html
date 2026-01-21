@@ -1,0 +1,233 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AES File Encryption/Decryption</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 600px;
+            padding: 30px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #1a2a6c;
+            margin-bottom: 25px;
+            font-size: 2.2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-title {
+            color: #1a2a6c;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-title i {
+            font-size: 1.8rem;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px dashed #1a2a6c;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        
+        input[type="password"]:focus {
+            border-color: #1a2a6c;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(26, 42, 108, 0.2);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-encrypt {
+            background: linear-gradient(to right, #1a2a6c, #3a5fc5);
+            color: white;
+        }
+        
+        .btn-decrypt {
+            background: linear-gradient(to right, #b21f1f, #d9534f);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash-message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .flash-error {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+        
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #1a2a6c;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 20px;
+        }
+        
+        .info-box h3 {
+            color: #1a2a6c;
+            margin-bottom: 10px;
+        }
+        
+        .info-box ul {
+            padding-left: 20px;
+        }
+        
+        .info-box li {
+            margin-bottom: 8px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AES File Encryption/Decryption</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ 'error' if category == 'error' else 'success' }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <div class="card">
+            <h2 class="card-title">🔒 Encrypt File</h2>
+            <form action="/encrypt" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="encrypt-file">Select File to Encrypt</label>
+                    <input type="file" id="encrypt-file" name="file" required>
+                </div>
+                <div class="form-group">
+                    <label for="encrypt-password">Password</label>
+                    <input type="password" id="encrypt-password" name="password" placeholder="Enter encryption password" required>
+                </div>
+                <button type="submit" class="btn btn-encrypt">Encrypt File</button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h2 class="card-title">🔓 Decrypt File</h2>
+            <form action="/decrypt" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="decrypt-file">Select Encrypted File</label>
+                    <input type="file" id="decrypt-file" name="file" required>
+                </div>
+                <div class="form-group">
+                    <label for="decrypt-password">Password</label>
+                    <input type="password" id="decrypt-password" name="password" placeholder="Enter decryption password" required>
+                </div>
+                <button type="submit" class="btn btn-decrypt">Decrypt File</button>
+            </form>
+        </div>
+        
+        <div class="info-box">
+            <h3>Security Information</h3>
+            <ul>
+                <li>Uses AES-256 encryption with CBC mode</li>
+                <li>Password is never stored - only used for encryption/decryption</li>
+                <li>Each encryption uses a unique salt and initialization vector (IV)</li>
+                <li>Files are processed in memory and not stored on the server</li>
+                <li>Maximum file size: 16MB</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

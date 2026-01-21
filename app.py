@@ -1,205 +1,170 @@
 # app.py
 import os
-import sqlite3
-from flask import (
-    Flask, render_template, request, jsonify, session,
-    redirect, url_for, send_file
-)
-from io import BytesIO
+import base64
+from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 from werkzeug.utils import secure_filename
-from crypto import (
-    generate_salt, generate_verifier, generate_challenge, H, P, G,
-    ensure_user_rsa_keypair, encrypt_file_for_user, decrypt_file_for_user,
-    get_user_key_path
-)
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding, hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import io
 
 app = Flask(__name__)
-app.secret_key = "SUPER_SECRET_CHANGE_IN_PROD_2026!"
-DB_PATH = "database.db"
-UPLOAD_FOLDER = "uploads"
+app.secret_key = os.urandom(24)  # Generate a random secret key
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Directory to store uploaded files temporarily
+UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ======================
-# DATABASE
-# ======================
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def derive_key(password: str, salt: bytes) -> bytes:
+    """Derive a 32-byte key from the password using PBKDF2"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    return kdf.derive(password.encode())
 
-def init_db():
-    with get_db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                salt TEXT NOT NULL,
-                verifier TEXT NOT NULL
-            )
-        """)
-        conn.commit()
+def encrypt_file(file_data: bytes, password: str) -> bytes:
+    """Encrypt file data using AES-256-CBC"""
+    # Generate a random salt and IV
+    salt = os.urandom(16)
+    iv = os.urandom(16)
+    
+    # Derive key from password
+    key = derive_key(password, salt)
+    
+    # Pad the data to be compatible with block cipher
+    padder = padding.PKCS7(128).padder()
+    padded_data = padder.update(file_data) + padder.finalize()
+    
+    # Encrypt the data
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+    
+    # Return salt + IV + encrypted data
+    return salt + iv + encrypted_data
 
-# ======================
-# AUTHENTICATION (ZKP)
-# ======================
-@app.route("/")
+def decrypt_file(encrypted_data: bytes, password: str) -> bytes:
+    """Decrypt file data using AES-256-CBC"""
+    # Extract salt, IV, and encrypted data
+    salt = encrypted_data[:16]
+    iv = encrypted_data[16:32]
+    ciphertext = encrypted_data[32:]
+    
+    # Derive key from password
+    key = derive_key(password, salt)
+    
+    # Decrypt the data
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded_data = decryptor.update(ciphertext) + decryptor.finalize()
+    
+    # Remove padding
+    unpadder = padding.PKCS7(128).unpadder()
+    try:
+        original_data = unpadder.update(padded_data) + unpadder.finalize()
+        return original_data
+    except ValueError:
+        raise ValueError("Invalid password or corrupted file")
+
+@app.route('/')
 def index():
-    return redirect(url_for("register_page"))
+    return render_template('index.html')
 
-@app.route("/register", methods=["GET"])
-def register_page():
-    return render_template("register.html")
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
+@app.route('/encrypt', methods=['POST'])
+def encrypt():
+    if 'file' not in request.files:
+        flash('No file selected')
+        return redirect(url_for('index'))
     
-    if not username or not password:
-        return jsonify({"error": "Username and password required"}), 400
-
-    salt = generate_salt()
-    verifier = generate_verifier(password, salt)
-
-    with get_db() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO users (username, salt, verifier) VALUES (?, ?, ?)",
-            (username, salt, str(verifier))
-        )
-        conn.commit()
-
-    return jsonify({"status": "REGISTERED", "redirect": "/login"})
-
-@app.route("/login", methods=["GET"])
-def login_page():
-    return render_template("login.html")
-
-@app.route("/login/start", methods=["POST"])
-def login_start():
-    data = request.get_json()
-    username = data.get("username", "").strip()
+    file = request.files['file']
+    password = request.form.get('password')
     
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT salt FROM users WHERE username = ?", (username,)
-        ).fetchone()
+    if file.filename == '':
+        flash('No file selected')
+        return redirect(url_for('index'))
     
-    if not row:
-        return jsonify({"error": "User not found"}), 404
-
-    salt = row["salt"]
-    challenge = generate_challenge()
-    session["user"] = username
-    session["challenge"] = challenge
-
-    return jsonify({"salt": salt, "challenge": str(challenge)})
-
-@app.route("/login/finish", methods=["POST"])
-def login_finish():
-    if "user" not in session or "challenge" not in session:
-        return jsonify({"error": "Session expired"}), 403
-
-    data = request.get_json()
+    if not password:
+        flash('Password is required')
+        return redirect(url_for('index'))
+    
     try:
-        A = int(data["A"])
-        s = int(data["s"])
-    except (TypeError, ValueError, KeyError):
-        return jsonify({"error": "Invalid proof"}), 400
-
-    username = session["user"]
-    challenge = session["challenge"]
-
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT verifier FROM users WHERE username = ?", (username,)
-        ).fetchone()
-    
-    if not row:
-        return jsonify({"error": "User not found"}), 404
-
-    v = int(row["verifier"])
-    e = H(A, challenge) % (P - 1)
-    left = pow(G, s, P)
-    right = (A * pow(v, e, P)) % P
-
-    if left == right:
-        session["authenticated"] = True
-        session["username"] = username
-        return jsonify({"status": "AUTHENTICATED", "redirect": "/dashboard"})
-    else:
-        return jsonify({"status": "FAILED"}), 401
-
-# ======================
-# FILE ENCRYPTION SYSTEM
-# ======================
-@app.route("/dashboard")
-def dashboard():
-    if not session.get("authenticated"):
-        return redirect(url_for("login_page"))
-    return render_template("dashboard.html")
-
-@app.route("/encrypt", methods=["POST"])
-def encrypt_file():
-    if not session.get("authenticated"):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    username = session["username"]
-    ensure_user_rsa_keypair(username)
-
-    if "file" not in request.files:
-        return jsonify({"error": "No file"}), 400
-    
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Empty filename"}), 400
-
-    try:
-        data = file.read()
-        encrypted = encrypt_file_for_user(data, username)
+        # Read file data
+        file_data = file.read()
+        
+        # Encrypt the file
+        encrypted_data = encrypt_file(file_data, password)
+        
+        # Create a BytesIO object for the encrypted data
+        encrypted_io = io.BytesIO(encrypted_data)
+        encrypted_io.seek(0)
+        
+        # Generate output filename
+        original_name = secure_filename(file.filename)
+        output_name = f"{original_name}.encrypted"
+        
         return send_file(
-            BytesIO(encrypted),
-            mimetype="application/octet-stream",
+            encrypted_io,
+            mimetype='application/octet-stream',
             as_attachment=True,
-            download_name=f"{secure_filename(file.filename)}.enc"
+            download_name=output_name
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        flash(f'Encryption failed: {str(e)}')
+        return redirect(url_for('index'))
 
-@app.route("/decrypt", methods=["POST"])
-def decrypt_file():
-    if not session.get("authenticated"):
-        return jsonify({"error": "Unauthorized"}), 403
+@app.route('/decrypt', methods=['POST'])
+def decrypt():
+    if 'file' not in request.files:
+        flash('No file selected')
+        return redirect(url_for('index'))
     
-    username = session["username"]
-    if not os.path.exists(get_user_key_path(username)):
-        return jsonify({"error": "Encrypt a file first"}), 400
-
-    if "file" not in request.files:
-        return jsonify({"error": "No file"}), 400
-
-    file = request.files["file"]
+    file = request.files['file']
+    password = request.form.get('password')
+    
+    if file.filename == '':
+        flash('No file selected')
+        return redirect(url_for('index'))
+    
+    if not password:
+        flash('Password is required')
+        return redirect(url_for('index'))
+    
     try:
+        # Read encrypted file data
         encrypted_data = file.read()
-        plaintext = decrypt_file_for_user(encrypted_data, username)
-        try:
-            text = plaintext.decode("utf-8")
-            return jsonify({"content": text})
-        except UnicodeDecodeError:
-            return jsonify({"content": "BINARY_FILE", "size_bytes": len(plaintext)})
+        
+        # Decrypt the file
+        decrypted_data = decrypt_file(encrypted_data, password)
+        
+        # Create a BytesIO object for the decrypted data
+        decrypted_io = io.BytesIO(decrypted_data)
+        decrypted_io.seek(0)
+        
+        # Generate output filename
+        original_name = secure_filename(file.filename)
+        if original_name.endswith('.encrypted'):
+            output_name = original_name[:-10]  # Remove .encrypted extension
+        else:
+            output_name = f"decrypted_{original_name}"
+        
+        return send_file(
+            decrypted_io,
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=output_name
+        )
+    except ValueError as e:
+        flash('Decryption failed: Invalid password or corrupted file')
+        return redirect(url_for('index'))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        flash(f'Decryption failed: {str(e)}')
+        return redirect(url_for('index'))
 
-# ======================
-# SESSION
-# ======================
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("register_page"))
-
-# ======================
-# MAIN
-# ======================
-if __name__ == "__main__":
-    init_db()
-    app.run(debug=True) 
+if __name__ == '__main__':
+    app.run(debug=True)
